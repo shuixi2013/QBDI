@@ -302,7 +302,7 @@ void Engine::handleNewBasicBlock(rword pc) {
 
 
 bool Engine::precacheBasicBlock(rword pc) {
-    if (blockManager->getExecBlock(pc) != nullptr) {
+    if (blockManager->getProgrammedExecBlock(pc) != nullptr) {
         // already in cache
         return false;
     }
@@ -350,14 +350,14 @@ bool Engine::run(rword start, rword stop) {
                 blockManager->flushCommit();
             }
             // Test if we have it in cache
-            curExecBlock = blockManager->getExecBlock(currentPC);
+            curExecBlock = blockManager->getProgrammedExecBlock(currentPC);
             if(curExecBlock == nullptr) {
                 LogDebug("Engine::run", "Cache miss for 0x%" PRIRWORD ", patching & instrumenting new basic block", currentPC);
                 handleNewBasicBlock(currentPC);
                 // Used to signal the event
                 newBasicBlock = true;
                 // Set new basic block as current
-                curExecBlock = blockManager->getExecBlock(currentPC);
+                curExecBlock = blockManager->getProgrammedExecBlock(currentPC);
             }
             // Set context if necessary
             if(&(curExecBlock->getContext()->gprState) != curGPRState || &(curExecBlock->getContext()->fprState) != curFPRState) {
@@ -435,12 +435,11 @@ void Engine::signalEvent(VMEvent event, rword currentPC, GPRState *gprState, FPR
             if(lastUpdatePC != currentPC) {
                 lastUpdatePC = currentPC;
                 if(curExecBlock != nullptr) {
-                    const BBInfo* bbInfo = blockManager->getBBInfo(currentPC);
-                    uint16_t seqID = curExecBlock->getCurrentSeqID();
-                    vmState.sequenceStart = curExecBlock->getInstMetadata(curExecBlock->getSeqStart(seqID))->address;
-                    vmState.sequenceEnd   = curExecBlock->getInstMetadata(curExecBlock->getSeqEnd(seqID))->endAddress();
-                    vmState.basicBlockStart = bbInfo->start;
-                    vmState.basicBlockEnd   = bbInfo->end;
+                    const SeqLoc* seqLoc    = blockManager->getSeqLoc(currentPC);
+                    vmState.basicBlockStart = seqLoc->bbStart;
+                    vmState.basicBlockEnd   = seqLoc->bbEnd;
+                    vmState.sequenceStart   = seqLoc->seqStart;
+                    vmState.sequenceEnd     = seqLoc->seqEnd;
                 }
                 else {
                     vmState = VMState {event, currentPC, currentPC, currentPC, currentPC, 0};
