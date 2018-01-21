@@ -337,6 +337,7 @@ bool Engine::run(rword start, rword stop) {
         // Else execute through DBI
         else {
             bool newBasicBlock = false;
+            VMEvent event = (VMEvent) 0;
             LogDebug("Engine::run", "Executing 0x%" PRIRWORD " through DBI", currentPC);
             // Is cache flush pending?
             if(blockManager->isFlushPending()) {
@@ -359,22 +360,17 @@ bool Engine::run(rword start, rword stop) {
                 curExecBlock = blockManager->getExecBlock(currentPC);
             }
             // Set context if necessary
-            if(&(curExecBlock->getContext()->gprState) != curGPRState) {
+            if(&(curExecBlock->getContext()->gprState) != curGPRState || &(curExecBlock->getContext()->fprState) != curFPRState) {
                 curExecBlock->getContext()->gprState = *curGPRState;
-            }
-            if(&(curExecBlock->getContext()->fprState) != curFPRState) {
                 curExecBlock->getContext()->fprState = *curFPRState;
             }
             curGPRState = &(curExecBlock->getContext()->gprState);
             curFPRState = &(curExecBlock->getContext()->fprState);
             // Signal events
-            if(newBasicBlock) {
-                signalEvent(BASIC_BLOCK_NEW, currentPC, curGPRState, curFPRState);
-            }
-            if(curExecBlock->getSeqType(curExecBlock->getCurrentSeqID()) & SeqType::Entry) {
-                signalEvent(BASIC_BLOCK_ENTRY, currentPC, curGPRState, curFPRState);
-            }
-            signalEvent(SEQUENCE_ENTRY, currentPC, curGPRState, curFPRState);
+            event = SEQUENCE_ENTRY;
+            event = (VMEvent) (event | (BASIC_BLOCK_NEW & (0 - newBasicBlock)));
+            event = (VMEvent) (event | (BASIC_BLOCK_ENTRY & (0 - ((curExecBlock->getSeqType(curExecBlock->getCurrentSeqID()) & SeqType::Entry) > 0))));
+            signalEvent(event, currentPC, curGPRState, curFPRState);
             // Execute
             hasRan = true;
             switch(curExecBlock->execute()) {
@@ -389,10 +385,9 @@ bool Engine::run(rword start, rword stop) {
                     return hasRan;
             }
             // Signal events
-            if(curExecBlock->getSeqType(curExecBlock->getCurrentSeqID()) & SeqType::Exit) {
-                signalEvent(BASIC_BLOCK_EXIT, currentPC, curGPRState, curFPRState);
-            }
-            signalEvent(SEQUENCE_EXIT, currentPC, curGPRState, curFPRState);
+            event = SEQUENCE_EXIT;
+            event = (VMEvent) (event | (BASIC_BLOCK_EXIT & (0 - ((curExecBlock->getSeqType(curExecBlock->getCurrentSeqID()) & SeqType::Exit) > 0))));
+            signalEvent(event, currentPC, curGPRState, curFPRState);
         }
         // Get next block PC
         currentPC = QBDI_GPR_GET(curGPRState, REG_PC);
